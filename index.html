@@ -377,7 +377,7 @@ function reveal(){ if(revealed)return; revealBack(null,''); }
 function revealBack(autoRate,extraTop){
   revealed=true;
   const {card}=QUEUE[qi];
-  const exs=[['e',card.ex,card.exzh],['e2',card.ex2,card.exzh2],['e3',card.ex3,card.exzh3]].filter(x=>x[1]);
+  const exs=[['e',card.ex,card.exzh],['e2',card.ex2,card.exzh2],['e3',card.ex3,card.exzh3],['e4',card.ex4,card.exzh4],['e5',card.ex5,card.exzh5]].filter(x=>x[1]);
   const showEx = exs.length>0;
   const exHtml = exs.map(([k,nl,zh])=>`<div class="ex"><span class="exnl">${esc(nl)}</span><span class="exzh">${esc(zh||'')}</span>${HAS_AUDIO?`<button class="aud" style="width:36px;height:36px;font-size:16px;margin:8px auto 0" onclick="event.stopPropagation();play('${k}',${card.id})">🔊</button>`:''}</div>`).join('');
   $('#card').innerHTML=`<span class="cefr">${levelOf(card)}</span>
