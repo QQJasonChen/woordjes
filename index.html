@@ -77,8 +77,14 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
 .extra{text-align:center;color:var(--muted);font-size:14px;margin-top:8px;letter-spacing:.3px}
 .reveal-zone{margin-top:18px;border-top:1px dashed var(--line);padding-top:16px}
 .zh{font-size:24px;font-weight:700;color:var(--navy);text-align:center}
-.ex{background:var(--bg);border-radius:14px;padding:13px 15px;margin-top:16px;font-size:15px}
-.ex .exnl{color:var(--navy);font-weight:600}
+.ex{display:flex;align-items:center;gap:12px;background:var(--bg);border-radius:14px;padding:11px 14px;margin-top:10px;font-size:15px}
+.ex .extext{flex:1;min-width:0}
+.exaud{flex-shrink:0;width:38px;height:38px;border:none;background:#eef4fb;color:var(--blue);border-radius:50%;font-size:16px;cursor:pointer}
+.exaud:active{transform:scale(.9)}
+.wordrow{display:flex;align-items:center;justify-content:center;gap:12px}
+.wordaud{flex-shrink:0;width:42px;height:42px;border:none;background:#eef4fb;color:var(--blue);border-radius:50%;font-size:18px;cursor:pointer}
+.wordaud:active{transform:scale(.9)}
+.ex .exnl{display:block;color:var(--navy);font-weight:600}
 .starbtn{border:1px solid var(--line);background:#fff;color:var(--muted);font-weight:700;font-size:13px;border-radius:99px;padding:7px 16px;cursor:pointer}
 .starbtn.on{background:#fff4e6;border-color:var(--orange);color:var(--orange)}
 .exmore{display:block;width:100%;border:none;background:var(--bg);color:var(--blue);font-weight:700;font-size:13px;border-radius:10px;padding:10px;margin-top:8px;cursor:pointer}
@@ -357,7 +363,7 @@ function showCard(){
   else if(dir==='listen'){front=`<span class="cefr">${levelOf(card)}</span><div style="text-align:center"><button class="aud lg" onclick="event.stopPropagation();play('w',${card.id})">🔊</button></div><div class="hintline">聽發音，想想是什麼字</div>`;}
   else if(dir==='type'){front=`<span class="cefr">${levelOf(card)}</span><div class="zhbig" style="font-size:28px">${esc(card.zh)}</div>${posL?`<div class="hintline">${posL}${card.pos==='noun'?'（記得加 de/het）':''}</div>`:''}<div class="typebox"><input id="typeIn" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="用荷蘭文輸入…"></div>`;}
   else if(dir==='sentence'){front=`<span class="cefr">${levelOf(card)}</span><div class="hintline">用整句荷蘭文寫出來</div><div class="zhbig" style="font-size:21px;line-height:1.45">${esc(card.exzh||card.zh)}</div><div class="typebox"><input id="typeIn" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="輸入整句荷蘭文…"></div>`;}
-  else{front=`<span class="cefr">${levelOf(card)}</span>${posL?`<span class="pos">${posL}</span>`:''}${card.img?`<img class="cardimg" src="images/img_${card.id}.webp" alt="">`:''}<div class="word">${wordHtml(card.nl)}</div>${HAS_AUDIO?`<div style="text-align:center"><button class="aud" onclick="event.stopPropagation();play('w',${card.id})">🔊</button></div>`:''}`;}
+  else{front=`<span class="cefr">${levelOf(card)}</span>${posL?`<span class="pos">${posL}</span>`:''}${card.img?`<img class="cardimg" src="images/img_${card.id}.webp" alt="">`:''}<div class="wordrow"><div class="word">${wordHtml(card.nl)}</div>${HAS_AUDIO?`<button class="wordaud" onclick="event.stopPropagation();play('w',${card.id})">🔊</button>`:''}</div>`;}
   $('#card').innerHTML=front;
   if(dir==='listen')setTimeout(()=>play('w',card.id),250);
   if(dir==='type'||dir==='sentence'){
@@ -387,7 +393,7 @@ function revealBack(autoRate,extraTop){
   const {card}=QUEUE[qi];
   const exs=[['e',card.ex,card.exzh],['e2',card.ex2,card.exzh2],['e3',card.ex3,card.exzh3],['e4',card.ex4,card.exzh4],['e5',card.ex5,card.exzh5]].filter(x=>x[1]);
   const showEx = exs.length>0;
-  const exItem=([k,nl,zh])=>`<div class="ex"><span class="exnl">${esc(nl)}</span><span class="exzh">${esc(zh||'')}</span>${HAS_AUDIO?`<button class="aud" style="width:34px;height:34px;font-size:15px;margin:6px auto 0" onclick="event.stopPropagation();play('${k}',${card.id})">🔊</button>`:''}</div>`;
+  const exItem=([k,nl,zh])=>`<div class="ex"><div class="extext"><span class="exnl">${esc(nl)}</span><span class="exzh">${esc(zh||'')}</span></div>${HAS_AUDIO?`<button class="exaud" onclick="event.stopPropagation();play('${k}',${card.id})">🔊</button>`:''}</div>`;
   let exHtml='';
   if(exs.length){
     curExs=exs.map(x=>x[0]); curCardId=card.id;
@@ -399,10 +405,9 @@ function revealBack(autoRate,extraTop){
   $('#card').innerHTML=`<span class="cefr">${levelOf(card)}</span>
     ${extraTop||''}
     ${card.img?`<img class="cardimg" src="images/img_${card.id}.webp" alt="">`:''}
-    <div class="word" style="font-size:34px">${wordHtml(card.nl)}</div>
+    <div class="wordrow"><div class="word" style="font-size:34px">${wordHtml(card.nl)}</div>${HAS_AUDIO?`<button class="wordaud" onclick="event.stopPropagation();play('w',${card.id})">🔊</button>`:''}</div>
     ${card.extra?`<div class="extra">${esc(card.extra)}</div>`:''}
-    ${HAS_AUDIO?`<div style="text-align:center"><button class="aud" onclick="event.stopPropagation();play('w',${card.id})">🔊</button></div>`:''}
-    <div style="text-align:center;margin-top:6px"><button class="starbtn ${STAR.has(card.id)?'on':''}" onclick="event.stopPropagation();toggleStar(${card.id});this.classList.toggle('on');this.textContent=this.classList.contains('on')?'★ 已收藏':'☆ 標記不熟';">${STAR.has(card.id)?'★ 已收藏':'☆ 標記不熟'}</button></div>
+    <div style="text-align:center;margin-top:10px"><button class="starbtn ${STAR.has(card.id)?'on':''}" onclick="event.stopPropagation();toggleStar(${card.id});this.classList.toggle('on');this.textContent=this.classList.contains('on')?'★ 已收藏':'☆ 標記不熟';">${STAR.has(card.id)?'★ 已收藏':'☆ 標記不熟'}</button></div>
     <div class="reveal-zone"><div class="zh">${esc(card.zh)}</div>
     ${exHtml}
     </div></div>`;
