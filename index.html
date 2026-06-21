@@ -81,6 +81,8 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
 .ex .extext{flex:1;min-width:0}
 .exaud{flex-shrink:0;width:38px;height:38px;border:none;background:#eef4fb;color:var(--blue);border-radius:50%;font-size:16px;cursor:pointer}
 .exaud:active{transform:scale(.9)}
+.exbk{flex-shrink:0;width:34px;height:34px;border:none;background:transparent;border-radius:50%;font-size:16px;cursor:pointer;filter:grayscale(1);opacity:.45}
+.exbk.on{filter:none;opacity:1}
 .wordrow{display:flex;align-items:center;justify-content:center;gap:12px}
 .wordaud{flex-shrink:0;width:42px;height:42px;border:none;background:#eef4fb;color:var(--blue);border-radius:50%;font-size:18px;cursor:pointer}
 .wordaud:active{transform:scale(.9)}
@@ -158,6 +160,8 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
       <div class="section-t">學習方向</div>
       <div class="seg" id="dirSeg"></div>
 
+      <button class="bigbtn ghost" id="myExBtn" style="font-size:15px">🔖 我的收藏句 <span id="myExN"></span></button>
+
       <div class="section-t">牌組</div>
       <div class="chips" id="levelChips"></div>
       <div class="chips" id="themeChips" style="margin-top:4px"></div>
@@ -198,6 +202,17 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
     <h2>太棒了！</h2>
     <p id="doneMsg">今天的複習完成了</p>
     <button class="bigbtn" id="doneBack" style="max-width:240px">回首頁</button>
+  </div>
+
+  <!-- SAVED SENTENCES -->
+  <div id="sentences" class="study hidden">
+    <div class="top" style="padding:14px 0">
+      <button class="backlink" id="sentBack" style="padding:0">‹ 返回</button>
+      <span class="spacer"></span>
+      <button class="exmore" id="sentPlayAll" style="width:auto;margin:0;padding:8px 14px">🔊 連播全部</button>
+    </div>
+    <h2 style="color:var(--navy);font-size:20px;margin:4px 2px 12px">🔖 我的收藏句</h2>
+    <div id="sentList"></div>
   </div>
 
   <!-- PAYWALL -->
@@ -262,6 +277,9 @@ let CFG = LS.get('wj_cfg', {dir:'n2z', deck:'A1', newPerDay:15});
 let STAT = LS.get('wj_stat', {streak:0, lastDay:null, today:0, todayDate:null});
 let STAR = new Set(LS.get('wj_star', []));   // manually-saved 不熟 words
 function toggleStar(id){ STAR.has(id)?STAR.delete(id):STAR.add(id); LS.set('wj_star',[...STAR]); }
+let EXSTAR = new Set(LS.get('wj_exstar', []));   // saved example sentences "cardId:exKey"
+function toggleExStar(cardId,k){ const id=cardId+':'+k; EXSTAR.has(id)?EXSTAR.delete(id):EXSTAR.add(id); LS.set('wj_exstar',[...EXSTAR]); }
+const EXFIELD={e:['ex','exzh'],e2:['ex2','exzh2'],e3:['ex3','exzh3'],e4:['ex4','exzh4'],e5:['ex5','exzh5']};
 const DAY=86400000, now=()=>Date.now(), todayStr=()=>new Date(now()).toISOString().slice(0,10);
 function rollDay(){const t=todayStr();if(STAT.todayDate!==t){if(STAT.lastDay){const diff=Math.round((new Date(t)-new Date(STAT.lastDay))/DAY);if(diff>1)STAT.streak=0;}STAT.today=0;STAT.todayDate=t;LS.set('wj_stat',STAT);}}
 rollDay();
@@ -337,6 +355,7 @@ function renderHome(){
   $('#sToday').textContent=STAT.today||0;
   $('#startBtn').disabled=dueNow()===0;
   $('#startBtn').textContent=dueNow()===0?'這牌組複習完了 ✓':'開始學習';
+  $('#myExN').textContent=EXSTAR.size?`(${EXSTAR.size})`:'';
 }
 
 /* ---------- STUDY ---------- */
@@ -393,7 +412,7 @@ function revealBack(autoRate,extraTop){
   const {card}=QUEUE[qi];
   const exs=[['e',card.ex,card.exzh],['e2',card.ex2,card.exzh2],['e3',card.ex3,card.exzh3],['e4',card.ex4,card.exzh4],['e5',card.ex5,card.exzh5]].filter(x=>x[1]);
   const showEx = exs.length>0;
-  const exItem=([k,nl,zh])=>`<div class="ex"><div class="extext"><span class="exnl">${esc(nl)}</span><span class="exzh">${esc(zh||'')}</span></div>${HAS_AUDIO?`<button class="exaud" onclick="event.stopPropagation();play('${k}',${card.id})">🔊</button>`:''}</div>`;
+  const exItem=([k,nl,zh])=>`<div class="ex"><div class="extext"><span class="exnl">${esc(nl)}</span><span class="exzh">${esc(zh||'')}</span></div><button class="exbk ${EXSTAR.has(card.id+':'+k)?'on':''}" title="收藏這句" onclick="event.stopPropagation();toggleExStar(${card.id},'${k}');this.classList.toggle('on')">🔖</button>${HAS_AUDIO?`<button class="exaud" onclick="event.stopPropagation();play('${k}',${card.id})">🔊</button>`:''}</div>`;
   let exHtml='';
   if(exs.length){
     curExs=exs.map(x=>x[0]); curCardId=card.id;
@@ -442,6 +461,29 @@ function undo(){
 }
 function finishStudy(){$('#study').classList.add('hidden');$('#done').classList.remove('hidden');$('#doneMsg').textContent=`複習了 ${STAT.today} 張 · 連續 ${STAT.streak} 天 🔥`;}
 
+/* ---------- saved example sentences ---------- */
+let curSent=[];
+function savedSentences(){
+  const out=[];
+  EXSTAR.forEach(id=>{const [cid,k]=id.split(':');const c=VOCAB.find(x=>x.id==cid);if(!c)return;const [nf,zf]=EXFIELD[k]||[];if(c[nf])out.push({cid:c.id,k,nl:c[nf],zh:c[zf]});});
+  return out;
+}
+function showSentences(){
+  $('#home').classList.add('hidden');$('#study').classList.add('hidden');$('#done').classList.add('hidden');
+  $('#sentences').classList.remove('hidden');
+  curSent=savedSentences();
+  $('#sentPlayAll').style.display=(curSent.length&&HAS_AUDIO)?'':'none';
+  $('#sentList').innerHTML = curSent.length
+    ? curSent.map(it=>`<div class="ex"><div class="extext"><span class="exnl">${esc(it.nl)}</span><span class="exzh">${esc(it.zh||'')}</span></div>${HAS_AUDIO?`<button class="exaud" onclick="play('${it.k}',${it.cid})">🔊</button>`:''}<button class="exbk on" onclick="toggleExStar(${it.cid},'${it.k}');this.closest('.ex').remove()">🔖</button></div>`).join('')
+    : '<p style="text-align:center;color:var(--muted);padding:46px 20px">還沒有收藏的句子。<br>複習時點句子右邊的 🔖 就能收藏，方便之後專門複習、連播練聽力。</p>';
+}
+function playSentList(){
+  if(!HAS_AUDIO||!curSent.length)return;
+  if(!AUD)AUD=new Audio();let i=0;
+  const next=()=>{if(i>=curSent.length){AUD.onended=null;return;}AUD.src=`audio/${curSent[i].k}_${curSent[i].cid}.mp3`;AUD.playbackRate=0.92;i++;AUD.onended=next;AUD.play().catch(()=>{AUD.onended=null;});};
+  next();
+}
+
 /* ---------- login unlock (owner / authorised) ----------
    ⚠️ client-side only; change these credentials to your own. */
 const ACCOUNTS={ 'qq':'qq' };   // 帳號:密碼（可加多組）
@@ -464,6 +506,9 @@ $('#pwIn').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 $('#startBtn').onclick=startStudy;
 $('#quitBtn').onclick=()=>{lastSnap=null;renderHome();};
 $('#doneBack').onclick=()=>{lastSnap=null;renderHome();};
+$('#myExBtn').onclick=showSentences;
+$('#sentBack').onclick=()=>{renderHome();};
+$('#sentPlayAll').onclick=playSentList;
 $('#undoBtn').onclick=undo;
 document.addEventListener('keydown',e=>{
   if($('#study').classList.contains('hidden'))return;
