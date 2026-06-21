@@ -171,6 +171,8 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
       <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:2px">
         <b style="color:var(--blue)">de</b> 藍 · <b style="color:var(--green)">het</b> 綠 — 用顏色記名詞性別</div>
 
+      <button class="bigbtn ghost" id="syncBtn" style="font-size:14px;margin-top:6px">🔄 進度轉移（換裝置用）</button>
+
       <div class="procard" id="proCard">
         <h3>⭐ Woordjes Pro</h3>
         <div style="font-size:13px;color:#7a4a12;margin-bottom:8px">單字永久免費 · 例句/造句每天免費 20 句</div>
@@ -249,6 +251,24 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
       <button class="prounlock" id="loginBtn">登入</button>
       <div id="loginErr" style="text-align:center;color:var(--red);font-size:13px;font-weight:700;margin-top:10px;min-height:18px"></div>
       <button class="closex" id="closeLogin">取消</button>
+    </div>
+  </div>
+
+  <!-- PROGRESS TRANSFER (export / import) -->
+  <div id="syncModal" class="pw hidden">
+    <div class="sheet">
+      <div class="grip"></div>
+      <h2>🔄 進度轉移</h2>
+      <div class="psub">換裝置時，把進度從一台搬到另一台（無帳號、不上雲）</div>
+      <div style="font-weight:800;color:var(--navy);margin:18px 0 8px">① 在「有進度」的這台匯出</div>
+      <button class="prounlock" id="doExport">產生進度代碼</button>
+      <textarea id="exportCode" readonly placeholder="代碼會出現在這裡，按上面的鈕" style="width:100%;height:80px;border:2px solid var(--line);border-radius:12px;padding:10px;margin-top:10px;font-size:12px;resize:none"></textarea>
+      <button class="restore" id="copyCode" style="margin-top:6px">📋 複製代碼</button>
+      <div style="height:1px;background:var(--line);margin:16px 0"></div>
+      <div style="font-weight:800;color:var(--navy);margin-bottom:8px">② 在另一台貼上匯入</div>
+      <textarea id="importCode" placeholder="貼上另一台產生的代碼" style="width:100%;height:80px;border:2px solid var(--line);border-radius:12px;padding:10px;font-size:12px;resize:none"></textarea>
+      <button class="prounlock" id="doImport" style="margin-top:10px">匯入並還原進度</button>
+      <button class="closex" id="closeSync">關閉</button>
     </div>
   </div>
 
@@ -499,6 +519,16 @@ function doLogin(){
 /* secret shortcut: tap the footer 5× to open the login sheet */
 let _tapN=0,_tapT=0;
 function ownerTap(){const t=Date.now();if(t-_tapT>1500)_tapN=0;_tapT=t;_tapN++;if(_tapN>=5){_tapN=0;openLogin();}}
+
+/* ---------- progress export / import (no account, no server) ---------- */
+function gatherProgress(){const o={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf('wj_')===0)o[k]=localStorage.getItem(k);}return o;}
+function exportProgress(){return btoa(unescape(encodeURIComponent(JSON.stringify(gatherProgress()))));}
+function importProgress(code){try{const o=JSON.parse(decodeURIComponent(escape(atob((code||'').trim()))));let n=0;Object.keys(o).forEach(k=>{if(k.indexOf('wj_')===0){localStorage.setItem(k,o[k]);n++;}});return n;}catch(e){return -1;}}
+$('#syncBtn').onclick=()=>{$('#exportCode').value='';$('#importCode').value='';$('#syncModal').classList.remove('hidden');};
+$('#closeSync').onclick=()=>$('#syncModal').classList.add('hidden');
+$('#doExport').onclick=()=>{$('#exportCode').value=exportProgress();};
+$('#copyCode').onclick=()=>{const t=$('#exportCode');if(!t.value){$('#doExport').click();}t.select();try{navigator.clipboard.writeText(t.value);}catch(e){document.execCommand('copy');}alert('已複製，傳到另一台貼上即可');};
+$('#doImport').onclick=()=>{const n=importProgress($('#importCode').value);if(n>0){alert('✅ 已匯入進度，重新載入');location.reload();}else{alert('代碼無效，請確認完整貼上');}};
 
 /* ---------- wire ---------- */
 $('#haveLogin').onclick=openLogin;
