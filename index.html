@@ -79,6 +79,8 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
 .zh{font-size:24px;font-weight:700;color:var(--navy);text-align:center}
 .ex{background:var(--bg);border-radius:14px;padding:13px 15px;margin-top:16px;font-size:15px}
 .ex .exnl{color:var(--navy);font-weight:600}
+.starbtn{border:1px solid var(--line);background:#fff;color:var(--muted);font-weight:700;font-size:13px;border-radius:99px;padding:7px 16px;cursor:pointer}
+.starbtn.on{background:#fff4e6;border-color:var(--orange);color:var(--orange)}
 .exmore{display:block;width:100%;border:none;background:var(--bg);color:var(--blue);font-weight:700;font-size:13px;border-radius:10px;padding:10px;margin-top:8px;cursor:pointer}
 .exmore:active{transform:scale(.98)}
 .ex .exzh{color:var(--muted);font-size:13px;display:block;margin-top:3px}
@@ -168,7 +170,6 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
         <button class="prounlock" id="proCardBtn">解鎖 Pro</button>
       </div>
 
-      <div class="foot" id="ownerFoot">Woordjes · 原創資料 + 自製發音 · 製作：QQ × Claude</div>
     </div>
   </div>
 
@@ -253,6 +254,8 @@ function useSent(){if(isPro())return;const s=sentState();s.n++;localStorage.setI
 let SRS = LS.get('wj_srs', {});
 let CFG = LS.get('wj_cfg', {dir:'n2z', deck:'A1', newPerDay:15});
 let STAT = LS.get('wj_stat', {streak:0, lastDay:null, today:0, todayDate:null});
+let STAR = new Set(LS.get('wj_star', []));   // manually-saved 不熟 words
+function toggleStar(id){ STAR.has(id)?STAR.delete(id):STAR.add(id); LS.set('wj_star',[...STAR]); }
 const DAY=86400000, now=()=>Date.now(), todayStr=()=>new Date(now()).toISOString().slice(0,10);
 function rollDay(){const t=todayStr();if(STAT.todayDate!==t){if(STAT.lastDay){const diff=Math.round((new Date(t)-new Date(STAT.lastDay))/DAY);if(diff>1)STAT.streak=0;}STAT.today=0;STAT.todayDate=t;LS.set('wj_stat',STAT);}}
 rollDay();
@@ -265,6 +268,7 @@ function levelOf(c){return (c.cefr||'A1').toUpperCase();}
 function isLearned(id){const s=SRS[id];return s&&s.reps>=2&&(s.interval||0)>=4;}
 function deckCards(){
   const d=CFG.deck;
+  if(d==='star') return VOCAB.filter(c=>STAR.has(c.id));
   if(d==='leech') return VOCAB.filter(c=>(SRS[c.id]&&(SRS[c.id].lapses||0)>=3));
   if(d&&d.startsWith('theme:')) return VOCAB.filter(c=>c.theme===d.slice(6));
   if(d==='all') return VOCAB;
@@ -310,9 +314,9 @@ function renderHome(){
   $('#dirSeg').innerHTML=DIRS.map(d=>`<button data-dir="${d.k}" class="${CFG.dir===d.k?'on':''}">${d.t}${d.pro&&!pro?' <span class="lock">🔒</span>':''}</button>`).join('');
   document.querySelectorAll('#dirSeg button').forEach(b=>b.onclick=()=>{const d=DIRS.find(x=>x.k===b.dataset.dir);if(d.pro&&!pro)return openPaywall();CFG.dir=b.dataset.dir;LS.set('wj_cfg',CFG);renderHome();});
   // level chips — all free (the words are free)
-  const levels=[{k:'A1'},{k:'A2'},{k:'B1'},{k:'all',name:'全部'},{k:'leech',name:'🔥弱點'}];
+  const levels=[{k:'A1'},{k:'A2'},{k:'B1'},{k:'all',name:'全部'},{k:'star',name:'⭐ 收藏'},{k:'leech',name:'🔥弱點'}];
   $('#levelChips').innerHTML=levels.map(L=>{
-    const cards=L.k==='all'?VOCAB:(L.k==='leech'?VOCAB.filter(c=>SRS[c.id]&&(SRS[c.id].lapses||0)>=3):VOCAB.filter(c=>levelOf(c)===L.k));
+    const cards=L.k==='all'?VOCAB:(L.k==='star'?VOCAB.filter(c=>STAR.has(c.id)):(L.k==='leech'?VOCAB.filter(c=>SRS[c.id]&&(SRS[c.id].lapses||0)>=3):VOCAB.filter(c=>levelOf(c)===L.k)));
     const nm=L.name||(L.k+' '+({A1:'入門',A2:'進階',B1:'B1'}[L.k]||''));
     return `<div class="dchip ${CFG.deck===L.k?'on':''}" data-deck="${L.k}">${nm}<small>${cards.length}字</small></div>`;
   }).join('');
@@ -398,6 +402,7 @@ function revealBack(autoRate,extraTop){
     <div class="word" style="font-size:34px">${wordHtml(card.nl)}</div>
     ${card.extra?`<div class="extra">${esc(card.extra)}</div>`:''}
     ${HAS_AUDIO?`<div style="text-align:center"><button class="aud" onclick="event.stopPropagation();play('w',${card.id})">🔊</button></div>`:''}
+    <div style="text-align:center;margin-top:6px"><button class="starbtn ${STAR.has(card.id)?'on':''}" onclick="event.stopPropagation();toggleStar(${card.id});this.classList.toggle('on');this.textContent=this.classList.contains('on')?'★ 已收藏':'☆ 標記不熟';">${STAR.has(card.id)?'★ 已收藏':'☆ 標記不熟'}</button></div>
     <div class="reveal-zone"><div class="zh">${esc(card.zh)}</div>
     ${exHtml}
     </div></div>`;
@@ -447,7 +452,6 @@ let _tapN=0,_tapT=0;
 function ownerTap(){const t=Date.now();if(t-_tapT>1500)_tapN=0;_tapT=t;_tapN++;if(_tapN>=5){_tapN=0;openLogin();}}
 
 /* ---------- wire ---------- */
-$('#ownerFoot').onclick=ownerTap;
 $('#haveLogin').onclick=openLogin;
 $('#closeLogin').onclick=closeLogin;
 $('#loginBtn').onclick=doLogin;
