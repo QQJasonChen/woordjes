@@ -120,6 +120,28 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
 .backlink{border:none;background:none;color:var(--blue);font-weight:700;font-size:15px;cursor:pointer;padding:10px}
 .foot{text-align:center;color:var(--muted);font-size:11px;padding:14px}
 
+/* search + browse (dictionary mode) */
+.searchbar{display:flex;align-items:center;gap:9px;background:#fff;border:2px solid var(--line);border-radius:14px;
+  padding:12px 14px;box-shadow:var(--shadow);cursor:text}
+.searchbar input{flex:1;border:none;outline:none;font-size:15px;color:var(--text);background:none;cursor:text}
+.searchbar input::placeholder{color:var(--muted)}
+.browsewrap{flex:1;display:flex;flex-direction:column;padding:0 18px 22px;min-height:0}
+.bsearch{display:flex;align-items:center;gap:9px;background:#fff;border:2px solid var(--orange);border-radius:14px;padding:12px 14px;margin-bottom:8px}
+.bsearch input{flex:1;border:none;outline:none;font-size:16px;background:none;color:var(--text)}
+.bclear{flex-shrink:0;border:none;background:var(--bg);color:var(--muted);width:26px;height:26px;border-radius:50%;font-size:13px;cursor:pointer}
+.bcount{font-size:12px;color:var(--muted);margin:2px 2px 10px;font-weight:700}
+.blist{display:flex;flex-direction:column;gap:8px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch}
+.brow{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow);cursor:pointer}
+.browhead{display:flex;align-items:center;gap:10px}
+.bword{font-size:18px;font-weight:800;color:var(--navy);flex:1;min-width:0;word-break:break-word}
+.bzh{font-size:14px;color:var(--text);font-weight:600;flex-shrink:0;text-align:right}
+.baud{flex-shrink:0;width:36px;height:36px;border:none;background:#eef4fb;color:var(--blue);border-radius:50%;font-size:15px;cursor:pointer}
+.baud:active{transform:scale(.9)}
+.bextra{font-size:12px;color:var(--muted);margin-top:4px;letter-spacing:.2px}
+.bdetail{margin-top:11px;border-top:1px dashed var(--line);padding-top:11px}
+.bempty{text-align:center;color:var(--muted);padding:44px 20px;line-height:1.7}
+.scopechip{cursor:pointer}
+
 /* paywall */
 .pw{position:fixed;inset:0;background:rgba(10,18,30,.55);display:flex;align-items:flex-end;justify-content:center;z-index:50}
 .pw .sheet{background:#fff;width:100%;max-width:560px;border-radius:26px 26px 0 0;padding:26px 22px calc(26px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(0,0,0,.25)}
@@ -146,6 +168,10 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
       <span class="chip pro" id="proChip">⭐ 升級 Pro</span>
     </div>
     <div class="home">
+      <div class="searchbar" id="homeSearch">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7a8699" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="homeSearchIn" readonly placeholder="搜尋單字（中文或荷蘭文）">
+      </div>
       <div class="hero">
         <div class="due" id="dueCount">0</div>
         <div class="duelbl">張卡片待複習</div>
@@ -217,6 +243,22 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
     </div>
     <h2 style="color:var(--navy);font-size:20px;margin:4px 2px 12px">🔖 我的收藏句</h2>
     <div id="sentList"></div>
+  </div>
+
+  <!-- BROWSE / SEARCH (dictionary mode) -->
+  <div id="browse" class="browsewrap hidden">
+    <div class="top" style="padding:14px 0">
+      <button class="backlink" id="browseBack" style="padding:0">‹ 返回</button>
+      <span class="spacer"></span>
+      <span class="chip scopechip" id="browseScope"></span>
+    </div>
+    <div class="bsearch">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff8200" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="browseIn" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="輸入中文或荷蘭文…">
+      <button class="bclear" id="browseClear">✕</button>
+    </div>
+    <div class="bcount" id="browseCount"></div>
+    <div class="blist" id="browseList"></div>
   </div>
 
   <!-- PAYWALL -->
@@ -351,6 +393,7 @@ $('#restoreBtn').onclick=()=>{ if(!nativeIAP('restore')){ alert('請在 iOS App 
 /* ---------- HOME ---------- */
 function renderHome(){
   $('#home').classList.remove('hidden');$('#study').classList.add('hidden');$('#done').classList.add('hidden');
+  $('#sentences').classList.add('hidden');$('#browse').classList.add('hidden');
   const pro=isPro();
   $('#streakChip').textContent='🔥 '+(STAT.streak||0);
   $('#proChip').textContent = pro?'⭐ Pro':'⭐ 升級 Pro';
@@ -505,6 +548,77 @@ function playSentList(){
   const next=()=>{if(i>=curSent.length){AUD.onended=null;return;}AUD.src=`audio/${curSent[i].k}_${curSent[i].cid}.mp3`;AUD.playbackRate=0.92;i++;AUD.onended=next;AUD.play().catch(()=>{AUD.onended=null;});};
   next();
 }
+
+/* ---------- browse / search (dictionary mode, no SRS gate) ---------- */
+let BROWSE_SCOPED=false;
+function deckLabel(){
+  const d=CFG.deck;
+  if(d==='all')return '全部';
+  if(d==='star')return '⭐ 收藏';
+  if(d==='leech')return '🔥 弱點';
+  if(d&&d.startsWith('theme:'))return d.slice(6);
+  return d+' '+({A1:'入門',A2:'進階',B1:'B1'}[d]||'');
+}
+function browseBase(){ return BROWSE_SCOPED ? deckCards() : VOCAB; }
+function browseMatch(c,q){
+  if(!q)return true;
+  return norm(c.nl).includes(q)||norm(c.zh).includes(q)||norm(c.extra).includes(q)
+       ||(c.ex&&norm(c.ex).includes(q))||(c.exzh&&norm(c.exzh).includes(q));
+}
+function browseRow(c){
+  return `<div class="brow" data-id="${c.id}"><div class="browhead">`
+    +`<div class="bword">${wordHtml(c.nl)}</div><div class="bzh">${esc(c.zh)}</div>`
+    +(HAS_AUDIO?`<button class="baud" onclick="event.stopPropagation();play('w',${c.id})">🔊</button>`:'')
+    +`</div>${c.extra?`<div class="bextra">${esc(c.extra)}</div>`:''}</div>`;
+}
+function browseDetail(c){
+  const exs=[['e',c.ex,c.exzh],['e2',c.ex2,c.exzh2],['e3',c.ex3,c.exzh3],['e4',c.ex4,c.exzh4],['e5',c.ex5,c.exzh5]].filter(x=>x[1]);
+  const exHtml=exs.length?exs.map(([k,nl,zh])=>`<div class="ex"><div class="extext"><span class="exnl">${esc(nl)}</span><span class="exzh">${esc(zh||'')}</span></div>`
+      +(HAS_AUDIO?`<button class="exaud" onclick="event.stopPropagation();play('${k}',${c.id})">🔊</button>`:'')+`</div>`).join('')
+    :'<div style="color:var(--muted);font-size:13px;padding:4px 2px">（這個字還沒有例句）</div>';
+  return `<div class="bdetail">${exHtml}`
+    +`<div style="text-align:center;margin-top:10px"><button class="starbtn ${STAR.has(c.id)?'on':''}" `
+    +`onclick="event.stopPropagation();toggleStar(${c.id});this.classList.toggle('on');this.textContent=this.classList.contains('on')?'★ 已收藏':'☆ 標記不熟'">`
+    +`${STAR.has(c.id)?'★ 已收藏':'☆ 標記不熟'}</button></div></div>`;
+}
+function updateScopeChip(){
+  const el=$('#browseScope');
+  if(CFG.deck==='all'){el.textContent='全部範圍';el.classList.remove('scopechip');el.onclick=null;return;}
+  el.classList.add('scopechip');
+  el.textContent=(BROWSE_SCOPED?deckLabel():'全部')+' ▾';
+  el.onclick=()=>{BROWSE_SCOPED=!BROWSE_SCOPED;updateScopeChip();renderBrowse();};
+}
+function renderBrowse(){
+  const raw=($('#browseIn').value||''),q=norm(raw);
+  const res=browseBase().filter(c=>browseMatch(c,q));
+  const CAP=200,total=res.length,shown=res.slice(0,CAP);
+  $('#browseCount').textContent = q
+    ? `${total} 個結果`
+    : `共 ${total} 個單字${total>CAP?`（顯示前 ${CAP}，輸入關鍵字找特定的字）`:''}`;
+  $('#browseList').innerHTML = shown.length
+    ? shown.map(browseRow).join('')
+    : `<div class="bempty">找不到「${esc(raw)}」<br><span style="font-size:13px">換個關鍵字試試${CFG.deck!=='all'&&BROWSE_SCOPED?'，或點右上角切換成「全部」範圍':''}</span></div>`;
+}
+function openBrowse(){
+  $('#home').classList.add('hidden');$('#study').classList.add('hidden');$('#done').classList.add('hidden');$('#sentences').classList.add('hidden');
+  $('#browse').classList.remove('hidden');
+  BROWSE_SCOPED = (CFG.deck!=='all');   // default: respect the deck you picked on home
+  $('#browseIn').value='';
+  updateScopeChip();
+  renderBrowse();
+  setTimeout(()=>$('#browseIn').focus(),60);
+}
+$('#homeSearch').onclick=openBrowse;
+$('#browseBack').onclick=()=>{$('#browse').classList.add('hidden');renderHome();};
+$('#browseIn').addEventListener('input',renderBrowse);
+$('#browseClear').onclick=()=>{$('#browseIn').value='';renderBrowse();$('#browseIn').focus();};
+$('#browseList').addEventListener('click',e=>{
+  const row=e.target.closest('.brow');if(!row)return;
+  const open=row.querySelector('.bdetail');
+  if(open){open.remove();return;}
+  const c=VOCAB.find(x=>x.id===+row.dataset.id);if(!c)return;
+  row.insertAdjacentHTML('beforeend',browseDetail(c));
+});
 
 /* ---------- login unlock (owner / authorised) ----------
    ⚠️ client-side only; change these credentials to your own. */
