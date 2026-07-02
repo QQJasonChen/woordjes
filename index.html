@@ -217,7 +217,6 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
       <div class="seg" id="dirSeg"></div>
 
       <button class="bigbtn ghost" id="myExBtn" style="font-size:15px">🔖 我的收藏句 <span id="myExN"></span></button>
-      <button class="bigbtn ghost" id="myVocabBtn" style="font-size:15px">📒 例句生字本 <span id="myVocabN"></span></button>
       <button class="bigbtn ghost" id="exportBtn" style="font-size:15px">📤 匯出收藏（Markdown / RemNote）</button>
 
       <div class="section-t">牌組</div>
@@ -316,23 +315,12 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
     </div>
   </div>
 
-  <!-- 例句生字本（解析裡收藏、但主字庫沒有的字）-->
-  <div id="exvocab" class="pw hidden">
-    <div class="sheet">
-      <div class="grip"></div>
-      <h2 style="margin-bottom:2px">📒 例句生字本</h2>
-      <div class="psub">在 🔍 解析裡收藏、但不在主字庫的字</div>
-      <div id="exvocabList" class="grambody"></div>
-      <button class="closex" id="exvocabClose">關閉</button>
-    </div>
-  </div>
-
   <!-- 匯出收藏（Markdown / RemNote 填空）-->
   <div id="exportSheet" class="pw hidden">
     <div class="sheet">
       <div class="grip"></div>
       <h2 style="margin-bottom:2px">📤 匯出收藏</h2>
-      <div class="psub">收藏單字 ⭐ ＋ 例句生字 📒 ＋ 收藏句 🔖，可複製或寄到 Email</div>
+      <div class="psub">收藏單字 ⭐（含解析收藏的生字）＋ 收藏句 🔖，可複製或寄到 Email</div>
       <div class="seg" id="exFmtSeg" style="margin:10px 0">
         <button data-fmt="md" class="on">📝 Markdown</button>
         <button data-fmt="remnote">🧠 RemNote 填空</button>
@@ -431,17 +419,42 @@ let STAR = new Set(LS.get('wj_star', []));   // manually-saved 不熟 words
 function toggleStar(id){ STAR.has(id)?STAR.delete(id):STAR.add(id); LS.set('wj_star',[...STAR]); }
 let EXSTAR = new Set(LS.get('wj_exstar', []));   // saved example sentences "cardId:exKey"
 function toggleExStar(cardId,k){ const id=cardId+':'+k; EXSTAR.has(id)?EXSTAR.delete(id):EXSTAR.add(id); LS.set('wj_exstar',[...EXSTAR]); }
-/* 例句生字本：解析裡收藏、但主字庫沒有的字 {base,w,zh,pos} */
-let EXVOCAB = LS.get('wj_exvocab', []);
-function exvocabHas(base){ return EXVOCAB.some(x=>x.base===base); }
-/* 例句裡的任一字：字典有→進⭐收藏(可SRS)；沒有→進例句生字本 */
-function gramWordCollected(base,surface){ const id=WORDMAP[(base||'').toLowerCase()]??WORDMAP[(surface||'').toLowerCase()]; return id!=null ? STAR.has(id) : exvocabHas(base); }
+/* 我的生字卡：解析裡收藏、但主字庫沒有的字 → 直接生成真卡片進 ⭐ 收藏（可 SRS）。
+   卡片存 wj_mycards，id 從 MYCARD_BASE 起跳避免跟主字庫衝突；沒有音檔（c.my=1 時藏喇叭）。 */
+const MYCARD_BASE=100000;
+let MYCARDS = LS.get('wj_mycards', []);
+function addMyCard(base,surface,zh,pos,srcNl,srcZh){
+  const nl=(base||surface||'').toLowerCase(); if(!nl) return null;
+  const id=MYCARDS.reduce((m,c)=>Math.max(m,c.id),MYCARD_BASE-1)+1;
+  const card={id,nl,zh:zh||'',pos:pos||'',cefr:'生字',my:1};
+  if(srcNl){ card.ex=srcNl; card.exzh=srcZh||''; }
+  MYCARDS.push(card); LS.set('wj_mycards',MYCARDS);
+  VOCAB.push(card);
+  const k=norm(nl).replace(/^(de|het|een)\s+/,''); if(k&&WORDMAP[k]==null)WORDMAP[k]=id;
+  STAR.add(id); LS.set('wj_star',[...STAR]);
+  return card;
+}
+function removeMyCard(id){
+  const i=MYCARDS.findIndex(c=>c.id===id); if(i<0)return;
+  const nl=MYCARDS[i].nl;
+  MYCARDS.splice(i,1); LS.set('wj_mycards',MYCARDS);
+  const vi=VOCAB.findIndex(c=>c.id===id); if(vi>=0)VOCAB.splice(vi,1);
+  const k=norm(nl).replace(/^(de|het|een)\s+/,''); if(WORDMAP[k]===id)delete WORDMAP[k];
+  STAR.delete(id); LS.set('wj_star',[...STAR]);
+  delete SRS[id]; LS.set('wj_srs',SRS);
+}
+/* 例句裡的任一字：字典有→進⭐收藏；沒有→生成生字卡也進⭐。心智模型只有一句：收藏的字都在⭐ */
+function gramWordCollected(base,surface){ const id=WORDMAP[(base||'').toLowerCase()]??WORDMAP[(surface||'').toLowerCase()]; return id!=null&&STAR.has(id); }
 function toggleGramWord(base,surface,zh,pos){
   const id=WORDMAP[(base||'').toLowerCase()]??WORDMAP[(surface||'').toLowerCase()];
-  if(id!=null){ toggleStar(id); }
-  else { const i=EXVOCAB.findIndex(x=>x.base===base); if(i>=0)EXVOCAB.splice(i,1); else EXVOCAB.push({base,w:surface,zh,pos}); LS.set('wj_exvocab',EXVOCAB); }
+  if(id!=null){
+    if(id>=MYCARD_BASE&&STAR.has(id)){ removeMyCard(id); exToast('已從 ⭐ 收藏移除'); }
+    else { toggleStar(id); exToast(STAR.has(id)?'已加入 ⭐ 收藏牌組':'已從 ⭐ 收藏移除'); }
+  } else {
+    addMyCard(base,surface,zh,pos,GRAM_SRC.nl,GRAM_SRC.zh);
+    exToast('已生成卡片 → ⭐ 收藏牌組');
+  }
 }
-function updateExvocabBadge(){ const el=document.getElementById('myVocabN'); if(el) el.textContent=EXVOCAB.length?`(${EXVOCAB.length})`:''; }
 const EXFIELD={e:['ex','exzh'],e2:['ex2','exzh2'],e3:['ex3','exzh3'],e4:['ex4','exzh4'],e5:['ex5','exzh5']};
 const DAY=86400000, now=()=>Date.now(), todayStr=()=>new Date(now()).toISOString().slice(0,10);
 function rollDay(){const t=todayStr();if(STAT.todayDate!==t){if(STAT.lastDay){const diff=Math.round((new Date(t)-new Date(STAT.lastDay))/DAY);if(diff>1)STAT.streak=0;}STAT.today=0;STAT.todayDate=t;LS.set('wj_stat',STAT);}}
@@ -467,13 +480,13 @@ function dueNow(){const cards=deckCards();const due=cards.filter(c=>SRS[c.id]&&S
 
 /* ---------- queue & SM-2 ---------- */
 let QUEUE=[],qi=0,sessionTotal=0,lastSnap=null,exSeen=new Set();
-function buildQueue(){const cards=deckCards();const due=cards.filter(c=>SRS[c.id]&&SRS[c.id].due<=now());const fresh=cards.filter(c=>!SRS[c.id]).slice(0,CFG.newPerDay);let q=[...due,...fresh];for(let i=q.length-1;i>0;i--){const j=Math.floor((Math.sin(i*99.13+q.length)*0.5+0.5)*(i+1));[q[i],q[j]]=[q[j],q[i]];}QUEUE=q.map(c=>({card:c}));qi=0;sessionTotal=QUEUE.length;}
+function buildQueue(){let cards=deckCards();if(CFG.dir==='listen')cards=cards.filter(c=>!c.my);const due=cards.filter(c=>SRS[c.id]&&SRS[c.id].due<=now());const fresh=cards.filter(c=>!SRS[c.id]).slice(0,CFG.newPerDay);let q=[...due,...fresh];for(let i=q.length-1;i>0;i--){const j=Math.floor((Math.sin(i*99.13+q.length)*0.5+0.5)*(i+1));[q[i],q[j]]=[q[j],q[i]];}QUEUE=q.map(c=>({card:c}));qi=0;sessionTotal=QUEUE.length;}
 function schedule(id,rating){let s=SRS[id]||{interval:0,ease:2.5,reps:0,lapses:0};if(rating===0){s.lapses=(s.lapses||0)+1;s.reps=0;s.ease=Math.max(1.3,(s.ease||2.5)-0.2);s.interval=0;s.due=now()+60000;}else{if((s.reps||0)===0)s.interval=rating===2?3:1;else if(s.reps===1)s.interval=rating===2?6:3;else s.interval=Math.max(1,Math.round(s.interval*(s.ease||2.5)*(rating===2?1.3:1)));s.ease=Math.min(3,(s.ease||2.5)+(rating===2?0.15:0));s.reps=(s.reps||0)+1;s.due=now()+s.interval*DAY;}SRS[id]=s;LS.set('wj_srs',SRS);}
 
 /* ---------- audio ---------- */
 let AUD=null,curExs=[],curCardId=null;
-function play(kind,id){if(!HAS_AUDIO)return;if(!AUD)AUD=new Audio();AUD.onended=null;AUD.src=`audio/${kind}_${id}.mp3`;AUD.playbackRate=0.95;AUD.play().catch(()=>{});}
-function playExamples(){if(!HAS_AUDIO||!curExs.length)return;if(!AUD)AUD=new Audio();let i=0;const next=()=>{if(i>=curExs.length){AUD.onended=null;return;}AUD.src=`audio/${curExs[i]}_${curCardId}.mp3`;AUD.playbackRate=0.92;i++;AUD.onended=next;AUD.play().catch(()=>{AUD.onended=null;});};next();}
+function play(kind,id){if(!HAS_AUDIO||id>=MYCARD_BASE)return;if(!AUD)AUD=new Audio();AUD.onended=null;AUD.src=`audio/${kind}_${id}.mp3`;AUD.playbackRate=0.95;AUD.play().catch(()=>{});}
+function playExamples(){if(!HAS_AUDIO||!curExs.length||curCardId>=MYCARD_BASE)return;if(!AUD)AUD=new Audio();let i=0;const next=()=>{if(i>=curExs.length){AUD.onended=null;return;}AUD.src=`audio/${curExs[i]}_${curCardId}.mp3`;AUD.playbackRate=0.92;i++;AUD.onended=next;AUD.play().catch(()=>{AUD.onended=null;});};next();}
 
 /* ---------- helpers ---------- */
 function esc(s){return (s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
@@ -486,6 +499,14 @@ const WORDMAP = {};   // 例句裡的表面字 -> card id
   for(const c of VOCAB){
     if(IS_CJK){ if(c.nl) WORDMAP[c.nl]=c.id; }
     else { const k=norm(c.nl).replace(/^(de|het|een)\s+/,''); if(k && !WORDMAP[k]) WORDMAP[k]=c.id; }
+  }
+  // 載入我的生字卡進主字庫
+  for(const c of MYCARDS){ c.my=1; VOCAB.push(c); const k=norm(c.nl).replace(/^(de|het|een)\s+/,''); if(k&&WORDMAP[k]==null)WORDMAP[k]=c.id; }
+  // 舊版「例句生字本」(wj_exvocab) 一次性遷移成生字卡
+  const legacy=LS.get('wj_exvocab',[]);
+  if(legacy.length){
+    for(const w of legacy){ const k=norm(w.base||w.w||'').replace(/^(de|het|een)\s+/,''); if(k&&WORDMAP[k]==null) addMyCard(w.base,w.w,w.zh,w.pos); }
+    localStorage.removeItem('wj_exvocab');
   }
 })();
 function linkifyEx(text){
@@ -513,7 +534,7 @@ function showWordPop(id){
   $('#wpWord').innerHTML=wordHtml(c.nl);
   $('#wpRead').textContent=(c.extra && c.extra!=='-')?c.extra:'';
   $('#wpZh').textContent=c.zh||'';
-  $('#wpAud').style.display=HAS_AUDIO?'':'none';
+  $('#wpAud').style.display=(HAS_AUDIO&&!c.my)?'':'none';
   $('#wpAud').onclick=()=>play('w',id);
   const sync=()=>{ const on=STAR.has(id); $('#wpStar').textContent=on?'★ 已收藏（在「⭐收藏」牌組）':'☆ 收藏這個字'; $('#wpStar').classList.toggle('on',on); };
   $('#wpStar').onclick=()=>{ toggleStar(id); sync(); };
@@ -544,8 +565,8 @@ $('#closePw').onclick=closePaywall;
 $('#wpClose').onclick=()=>$('#wordpop').classList.add('hidden');
 
 /* ---------- 文法解析（付費解鎖；JSON 懶載入，不灌進主檔）---------- */
-let GRAMMAR=null, GRAMMAR_LOADING=null, GRAM_WORDS=[];
-function gcolToggle(i,btn){ const w=GRAM_WORDS[i]; if(!w)return; const base=w.base||w.w; toggleGramWord(base,w.w,w.zh||'',w.pos||''); const on=gramWordCollected(base,w.w); btn.classList.toggle('on',on); btn.textContent=on?'★ 已收藏':'☆ 收藏'; updateExvocabBadge(); }
+let GRAMMAR=null, GRAMMAR_LOADING=null, GRAM_WORDS=[], GRAM_SRC={};
+function gcolToggle(i,btn){ const w=GRAM_WORDS[i]; if(!w)return; const base=w.base||w.w; toggleGramWord(base,w.w,w.zh||'',w.pos||''); const on=gramWordCollected(base,w.w); btn.classList.toggle('on',on); btn.textContent=on?'★ 已收藏':'☆ 收藏'; }
 function loadGrammar(){
   if(GRAMMAR) return Promise.resolve(GRAMMAR);
   if(GRAMMAR_LOADING) return GRAMMAR_LOADING;
@@ -570,6 +591,8 @@ async function showGram(cardId, exKey){
   const d=(g[cardId]||{})[exKey];
   if(!d){ body.innerHTML='<div class="gloading">這句的文法解析還在準備中 🙏</div>'; return; }
   GRAM_WORDS=d.words||[];
+  const srcCard=VOCAB.find(c=>c.id==cardId);
+  GRAM_SRC=srcCard?{nl:srcCard[exKey],zh:srcCard[exKey==='ex'?'exzh':'exzh'+exKey.slice(2)]}:{};
   const words=GRAM_WORDS.map((w,i)=>{const on=gramWordCollected(w.base||w.w,w.w);return `<div class="gw"><div class="gwtop"><b>${esc(w.w)}</b>${w.base&&w.base!==w.w?`<span class="gbase">${esc(w.base)}</span>`:''}${w.pos?`<span class="gpos">${esc(w.pos)}</span>`:''}<button class="gcol ${on?'on':''}" onclick="gcolToggle(${i},this)">${on?'★ 已收藏':'☆ 收藏'}</button></div>${w.zh?`<div class="gwzh">${esc(w.zh)}</div>`:''}${w.note?`<div class="gnote">${esc(w.note)}</div>`:''}</div>`;}).join('');
   const points=(d.points||[]).map(p=>`<li>${esc(p)}</li>`).join('');
   body.innerHTML=(d.trans?`<div class="gtrans">${esc(d.trans)}</div>`:'')
@@ -579,15 +602,7 @@ async function showGram(cardId, exKey){
 }
 $('#gramClose').onclick=()=>$('#grampop').classList.add('hidden');
 
-/* ---------- 例句生字本 view ---------- */
-function renderExvocab(){
-  const list=$('#exvocabList');
-  if(!EXVOCAB.length){ list.innerHTML='<div class="gloading">還沒有收藏的生字。<br>在 🔍 解析裡點任一字旁的「☆ 收藏」就會進這裡 📒</div>'; return; }
-  list.innerHTML=EXVOCAB.map((w,i)=>`<div class="gw"><div class="gwtop"><b>${esc(w.w)}</b>${w.base&&w.base!==w.w?`<span class="gbase">${esc(w.base)}</span>`:''}${w.pos?`<span class="gpos">${esc(w.pos)}</span>`:''}<button class="gcol on" onclick="rmExvocab(${i})">✕ 移除</button></div>${w.zh?`<div class="gwzh">${esc(w.zh)}</div>`:''}</div>`).join('');
-}
-function rmExvocab(i){ EXVOCAB.splice(i,1); LS.set('wj_exvocab',EXVOCAB); renderExvocab(); updateExvocabBadge(); }
-$('#myVocabBtn').onclick=()=>{ renderExvocab(); $('#exvocab').classList.remove('hidden'); };
-$('#exvocabClose').onclick=()=>$('#exvocab').classList.add('hidden');
+/* (例句生字本已合併進 ⭐ 收藏牌組：解析裡收藏的字直接生成生字卡，可 SRS) */
 
 /* ---------- 匯出收藏（Markdown / RemNote 填空）---------- */
 let EXPORT_FMT='md';
@@ -596,7 +611,7 @@ function _reEsc(s){return (s||'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
 function exportSets(){
   const words=[...STAR].map(id=>VOCAB.find(c=>c.id==id)).filter(Boolean);
   const sents=[...EXSTAR].map(idk=>{const [cid,k]=idk.split(':');const c=VOCAB.find(x=>x.id==cid);if(!c)return null;const [nf,zf]=EXFIELD[k]||[];if(!c||!c[nf])return null;return {nl:c[nf],zh:c[zf]||''};}).filter(Boolean);
-  return {words, exv:EXVOCAB.slice(), sents};
+  return {words, sents};
 }
 /* RemNote 克漏字：能在例句裡找到該字 → 在句中挖空（含中文提示）；找不到 → 中文 = {{字}} */
 function clozeLine(nl,zh,ex){
@@ -605,12 +620,11 @@ function clozeLine(nl,zh,ex){
   return '- '+(zh?zh+' = ':'')+'{{'+(nl||'')+'}}';
 }
 function buildExport(fmt){
-  const {words,exv,sents}=exportSets();
-  if(!words.length&&!exv.length&&!sents.length) return '（還沒有收藏。收藏單字、例句生字或句子後再回來匯出 🙂）';
+  const {words,sents}=exportSets();
+  if(!words.length&&!sents.length) return '（還沒有收藏。收藏單字或句子後再回來匯出 🙂）';
   if(fmt==='remnote'){
     const L=[];
     words.forEach(c=>L.push(clozeLine(c.nl,c.zh,c.ex)));
-    exv.forEach(w=>L.push(clozeLine(w.base||w.w,w.zh,'')));
     sents.forEach(s=>L.push('- '+s.nl+' :: '+(s.zh||'')));
     return L.join('\n');
   }
@@ -618,8 +632,6 @@ function buildExport(fmt){
   let out='# Woordjes 收藏 · '+today+'\n';
   if(words.length){ out+='\n## ⭐ 單字 ('+words.length+')\n';
     words.forEach(c=>{ out+='- **'+c.nl+'**'+(c.pos?' _('+c.pos+')_':'')+(c.zh?' — '+c.zh:'')+'\n'; if(c.ex)out+='  - '+c.ex+(c.exzh?' — '+c.exzh:'')+'\n'; }); }
-  if(exv.length){ out+='\n## 📒 例句生字 ('+exv.length+')\n';
-    exv.forEach(w=>{ out+='- **'+(w.w||w.base)+'**'+(w.base&&w.base!==w.w?' ('+w.base+')':'')+(w.zh?' — '+w.zh:'')+'\n'; }); }
   if(sents.length){ out+='\n## 🔖 收藏句 ('+sents.length+')\n';
     sents.forEach(s=>{ out+='- '+s.nl+(s.zh?' — '+s.zh:'')+'\n'; }); }
   return out;
@@ -673,7 +685,6 @@ function renderHome(){
   $('#startBtn').disabled=dueNow()===0;
   $('#startBtn').textContent=dueNow()===0?'這牌組複習完了 ✓':'開始學習';
   $('#myExN').textContent=EXSTAR.size?`(${EXSTAR.size})`:'';
-  updateExvocabBadge();
 }
 
 /* ---------- STUDY ---------- */
@@ -700,7 +711,7 @@ function showCard(){
   else if(dir==='listen'){front=`<span class="cefr">${levelOf(card)}</span><div style="text-align:center"><button class="aud lg" onclick="event.stopPropagation();play('w',${card.id})">🔊</button></div><div class="hintline">聽發音，想想是什麼字</div>`;}
   else if(dir==='type'){front=`<span class="cefr">${levelOf(card)}</span><div class="zhbig" style="font-size:28px">${esc(card.zh)}</div>${posL?`<div class="hintline">${posL}${card.pos==='noun'?'（記得加 de/het）':''}</div>`:''}<div class="typebox"><input id="typeIn" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="用荷蘭文輸入…"></div>`;}
   else if(dir==='sentence'){front=`<span class="cefr">${levelOf(card)}</span><div class="hintline">用整句荷蘭文寫出來</div><div class="zhbig" style="font-size:21px;line-height:1.45">${esc(card.exzh||card.zh)}</div><div class="typebox"><input id="typeIn" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="輸入整句荷蘭文…"></div>`;}
-  else{front=`<span class="cefr">${levelOf(card)}</span>${posL?`<span class="pos">${posL}</span>`:''}${card.img?`<img class="cardimg" src="images/img_${card.id}.webp" alt="">`:''}<div class="wordrow"><div class="word">${wordHtml(card.nl)}</div>${HAS_AUDIO?`<button class="wordaud" onclick="event.stopPropagation();play('w',${card.id})">🔊</button>`:''}</div>`;}
+  else{front=`<span class="cefr">${levelOf(card)}</span>${posL?`<span class="pos">${posL}</span>`:''}${card.img?`<img class="cardimg" src="images/img_${card.id}.webp" alt="">`:''}<div class="wordrow"><div class="word">${wordHtml(card.nl)}</div>${HAS_AUDIO&&!card.my?`<button class="wordaud" onclick="event.stopPropagation();play('w',${card.id})">🔊</button>`:''}</div>`;}
   $('#card').innerHTML=front;
   if(dir==='listen')setTimeout(()=>play('w',card.id),250);
   if(dir==='type'||dir==='sentence'){
@@ -742,19 +753,19 @@ function revealBack(autoRate,extraTop){
   const {card}=QUEUE[qi];
   const exs=[['e',card.ex,card.exzh],['e2',card.ex2,card.exzh2],['e3',card.ex3,card.exzh3],['e4',card.ex4,card.exzh4],['e5',card.ex5,card.exzh5]].filter(x=>x[1]);
   const showEx = exs.length>0;
-  const exItem=([k,nl,zh])=>`<div class="ex"><div class="extext"><span class="exnl">${linkifyEx(nl)}</span><span class="exzh">${esc(zh||'')}</span></div><button class="exbk ${EXSTAR.has(card.id+':'+k)?'on':''}" title="收藏這句" onclick="event.stopPropagation();toggleExStar(${card.id},'${k}');this.classList.toggle('on')">🔖</button>${GRAMMAR_FILE?`<button class="exgram" title="文法解析" onclick="event.stopPropagation();showGram(${card.id},'${k==='e'?'ex':'ex'+k.slice(1)}')">🔍</button>`:''}${HAS_AUDIO?`<button class="exaud" onclick="event.stopPropagation();play('${k}',${card.id})">🔊</button>`:''}</div>`;
+  const exItem=([k,nl,zh])=>`<div class="ex"><div class="extext"><span class="exnl">${linkifyEx(nl)}</span><span class="exzh">${esc(zh||'')}</span></div><button class="exbk ${EXSTAR.has(card.id+':'+k)?'on':''}" title="收藏這句" onclick="event.stopPropagation();toggleExStar(${card.id},'${k}');this.classList.toggle('on')">🔖</button>${GRAMMAR_FILE&&!card.my?`<button class="exgram" title="文法解析" onclick="event.stopPropagation();showGram(${card.id},'${k==='e'?'ex':'ex'+k.slice(1)}')">🔍</button>`:''}${HAS_AUDIO&&!card.my?`<button class="exaud" onclick="event.stopPropagation();play('${k}',${card.id})">🔊</button>`:''}</div>`;
   let exHtml='';
   if(exs.length){
     curExs=exs.map(x=>x[0]); curCardId=card.id;
     const rest=exs.slice(2);
     const restHtml=rest.length?`<div id="moreExWrap" class="hidden">${rest.map(exItem).join('')}</div><button class="exmore" onclick="event.stopPropagation();document.getElementById('moreExWrap').classList.remove('hidden');this.remove();">▾ 看更多例句（還有 ${rest.length} 句）</button>`:'';
-    const playAll=(HAS_AUDIO&&exs.length>1)?`<button class="exmore" onclick="event.stopPropagation();playExamples()">🔊 連播全部例句</button>`:'';
+    const playAll=(HAS_AUDIO&&!card.my&&exs.length>1)?`<button class="exmore" onclick="event.stopPropagation();playExamples()">🔊 連播全部例句</button>`:'';
     exHtml=exs.slice(0,2).map(exItem).join('')+restHtml+playAll;
   }
   $('#card').innerHTML=`<span class="cefr">${levelOf(card)}</span>
     ${extraTop||''}
     ${card.img?`<img class="cardimg" src="images/img_${card.id}.webp" alt="">`:''}
-    <div class="wordrow"><div class="word" style="font-size:34px">${wordHtml(card.nl)}</div>${HAS_AUDIO?`<button class="wordaud" onclick="event.stopPropagation();play('w',${card.id})">🔊</button>`:''}</div>
+    <div class="wordrow"><div class="word" style="font-size:34px">${wordHtml(card.nl)}</div>${HAS_AUDIO&&!card.my?`<button class="wordaud" onclick="event.stopPropagation();play('w',${card.id})">🔊</button>`:''}</div>
     ${card.extra?`<div class="extra">${esc(card.extra)}</div>`:''}
     <div style="text-align:center;margin-top:10px"><button class="starbtn ${STAR.has(card.id)?'on':''}" onclick="event.stopPropagation();toggleStar(${card.id});this.classList.toggle('on');this.textContent=this.classList.contains('on')?'★ 已收藏':'☆ 標記不熟';">${STAR.has(card.id)?'★ 已收藏':'☆ 標記不熟'}</button></div>
     <div class="reveal-zone"><div class="zh">${esc(card.zh)}</div>
@@ -769,7 +780,7 @@ function revealBack(autoRate,extraTop){
     <button class="r-good" data-r="1">還可以<small>${ig}天</small></button>
     <button class="r-easy" data-r="2">太簡單<small>${ie}天</small></button></div>`;
   document.querySelectorAll('.rate button').forEach(b=>b.onclick=()=>rate(+b.dataset.r));
-  if(showEx&&CFG.dir!=='listen'&&HAS_AUDIO)setTimeout(()=>play('e',card.id),200);
+  if(showEx&&CFG.dir!=='listen'&&HAS_AUDIO&&!card.my)setTimeout(()=>play('e',card.id),200);
 }
 function rate(r){
   const {card}=QUEUE[qi];
@@ -844,13 +855,13 @@ function browseScore(c,q){
 function browseRow(c){
   return `<div class="brow" data-id="${c.id}"><div class="browhead">`
     +`<div class="bword">${wordHtml(c.nl)}<span class="bcefr">${levelOf(c)}</span></div><div class="bzh">${esc(c.zh)}</div>`
-    +(HAS_AUDIO?`<button class="baud" onclick="event.stopPropagation();play('w',${c.id})">🔊</button>`:'')
+    +(HAS_AUDIO&&!c.my?`<button class="baud" onclick="event.stopPropagation();play('w',${c.id})">🔊</button>`:'')
     +`</div>${c.extra?`<div class="bextra">${esc(c.extra)}</div>`:''}</div>`;
 }
 function browseDetail(c){
   const exs=[['e',c.ex,c.exzh],['e2',c.ex2,c.exzh2],['e3',c.ex3,c.exzh3],['e4',c.ex4,c.exzh4],['e5',c.ex5,c.exzh5]].filter(x=>x[1]);
   const exHtml=exs.length?exs.map(([k,nl,zh])=>`<div class="ex"><div class="extext"><span class="exnl">${linkifyEx(nl)}</span><span class="exzh">${esc(zh||'')}</span></div>`
-      +(GRAMMAR_FILE?`<button class="exgram" title="文法解析" onclick="event.stopPropagation();showGram(${c.id},'${k==='e'?'ex':'ex'+k.slice(1)}')">🔍</button>`:'')+(HAS_AUDIO?`<button class="exaud" onclick="event.stopPropagation();play('${k}',${c.id})">🔊</button>`:'')+`</div>`).join('')
+      +(GRAMMAR_FILE&&!c.my?`<button class="exgram" title="文法解析" onclick="event.stopPropagation();showGram(${c.id},'${k==='e'?'ex':'ex'+k.slice(1)}')">🔍</button>`:'')+(HAS_AUDIO&&!c.my?`<button class="exaud" onclick="event.stopPropagation();play('${k}',${c.id})">🔊</button>`:'')+`</div>`).join('')
     :'<div style="color:var(--muted);font-size:13px;padding:4px 2px">（這個字還沒有例句）</div>';
   return `<div class="bdetail">${exHtml}`
     +`<div style="text-align:center;margin-top:10px"><button class="starbtn ${STAR.has(c.id)?'on':''}" `
