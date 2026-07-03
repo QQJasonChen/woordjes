@@ -486,10 +486,10 @@ function schedule(id,rating){let s=SRS[id]||{interval:0,ease:2.5,reps:0,lapses:0
 
 /* ---------- audio ---------- */
 let AUD=null,curExs=[],curCardId=null;
-/* 例句語速：全域設定循環 1× → 0.85× → 0.7×，存 wj_cfg；只影響例句，單字發音不變 */
-const EX_SPEEDS=[1,0.85,0.7];
+/* 例句語速：全域設定循環 1× → 1.25× → 1.5× → 0.7× → 0.85× → 1×，存 wj_cfg；只影響例句，單字發音不變 */
+const EX_SPEEDS=[0.7,0.85,1,1.25,1.5];
 function exSpeed(){return CFG.exSpeed||1;}
-function exSpeedLabel(){return '🐢 語速 '+exSpeed()+'×';}
+function exSpeedLabel(){const v=exSpeed();return (v>1?'⚡':(v<1?'🐢':'🔊'))+' 語速 '+v+'×';}
 function cycleExSpeed(){
   const i=EX_SPEEDS.indexOf(exSpeed());
   CFG.exSpeed=EX_SPEEDS[(i+1)%EX_SPEEDS.length];LS.set('wj_cfg',CFG);
