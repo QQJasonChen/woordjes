@@ -268,6 +268,7 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
     <div class="top" style="padding:14px 0">
       <button class="backlink" id="sentBack" style="padding:0">‹ 返回</button>
       <span class="spacer"></span>
+      <button class="exmore spdbtn" id="sentSpeed" style="width:auto;margin:0 8px 0 0;padding:8px 14px" onclick="cycleExSpeed()"></button>
       <button class="exmore" id="sentPlayAll" style="width:auto;margin:0;padding:8px 14px">🔊 連播全部</button>
     </div>
     <h2 style="color:var(--navy);font-size:20px;margin:4px 2px 12px">🔖 我的收藏句</h2>
@@ -485,8 +486,18 @@ function schedule(id,rating){let s=SRS[id]||{interval:0,ease:2.5,reps:0,lapses:0
 
 /* ---------- audio ---------- */
 let AUD=null,curExs=[],curCardId=null;
-function play(kind,id){if(!HAS_AUDIO||id>=MYCARD_BASE)return;if(!AUD)AUD=new Audio();AUD.onended=null;AUD.src=`audio/${kind}_${id}.mp3`;AUD.playbackRate=0.95;AUD.play().catch(()=>{});}
-function playExamples(){if(!HAS_AUDIO||!curExs.length||curCardId>=MYCARD_BASE)return;if(!AUD)AUD=new Audio();let i=0;const next=()=>{if(i>=curExs.length){AUD.onended=null;return;}AUD.src=`audio/${curExs[i]}_${curCardId}.mp3`;AUD.playbackRate=0.92;i++;AUD.onended=next;AUD.play().catch(()=>{AUD.onended=null;});};next();}
+/* 例句語速：全域設定循環 1× → 0.85× → 0.7×，存 wj_cfg；只影響例句，單字發音不變 */
+const EX_SPEEDS=[1,0.85,0.7];
+function exSpeed(){return CFG.exSpeed||1;}
+function exSpeedLabel(){return '🐢 語速 '+exSpeed()+'×';}
+function cycleExSpeed(){
+  const i=EX_SPEEDS.indexOf(exSpeed());
+  CFG.exSpeed=EX_SPEEDS[(i+1)%EX_SPEEDS.length];LS.set('wj_cfg',CFG);
+  document.querySelectorAll('.spdbtn').forEach(b=>b.textContent=exSpeedLabel());
+  if(AUD&&!AUD.paused)AUD.playbackRate=0.92*exSpeed();   // 播到一半也即時變速
+}
+function play(kind,id){if(!HAS_AUDIO||id>=MYCARD_BASE)return;if(!AUD)AUD=new Audio();AUD.onended=null;AUD.src=`audio/${kind}_${id}.mp3`;AUD.playbackRate=kind==='w'?0.95:0.92*exSpeed();AUD.play().catch(()=>{});}
+function playExamples(){if(!HAS_AUDIO||!curExs.length||curCardId>=MYCARD_BASE)return;if(!AUD)AUD=new Audio();let i=0;const next=()=>{if(i>=curExs.length){AUD.onended=null;return;}AUD.src=`audio/${curExs[i]}_${curCardId}.mp3`;AUD.playbackRate=0.92*exSpeed();i++;AUD.onended=next;AUD.play().catch(()=>{AUD.onended=null;});};next();}
 
 /* ---------- helpers ---------- */
 function esc(s){return (s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
@@ -760,7 +771,8 @@ function revealBack(autoRate,extraTop){
     const rest=exs.slice(2);
     const restHtml=rest.length?`<div id="moreExWrap" class="hidden">${rest.map(exItem).join('')}</div><button class="exmore" onclick="event.stopPropagation();document.getElementById('moreExWrap').classList.remove('hidden');this.remove();">▾ 看更多例句（還有 ${rest.length} 句）</button>`:'';
     const playAll=(HAS_AUDIO&&!card.my&&exs.length>1)?`<button class="exmore" onclick="event.stopPropagation();playExamples()">🔊 連播全部例句</button>`:'';
-    exHtml=exs.slice(0,2).map(exItem).join('')+restHtml+playAll;
+    const spdBtn=(HAS_AUDIO&&!card.my)?`<button class="exmore spdbtn" onclick="event.stopPropagation();cycleExSpeed()">${exSpeedLabel()}</button>`:'';
+    exHtml=exs.slice(0,2).map(exItem).join('')+restHtml+playAll+spdBtn;
   }
   $('#card').innerHTML=`<span class="cefr">${levelOf(card)}</span>
     ${extraTop||''}
@@ -814,6 +826,8 @@ function showSentences(){
   $('#sentences').classList.remove('hidden');
   curSent=savedSentences();
   $('#sentPlayAll').style.display=(curSent.length&&HAS_AUDIO)?'':'none';
+  $('#sentSpeed').style.display=(curSent.length&&HAS_AUDIO)?'':'none';
+  $('#sentSpeed').textContent=exSpeedLabel();
   $('#sentList').innerHTML = curSent.length
     ? curSent.map(it=>`<div class="ex"><div class="extext"><span class="exnl">${esc(it.nl)}</span><span class="exzh">${esc(it.zh||'')}</span></div>${HAS_AUDIO?`<button class="exaud" onclick="play('${it.k}',${it.cid})">🔊</button>`:''}<button class="exbk on" onclick="toggleExStar(${it.cid},'${it.k}');this.closest('.ex').remove()">🔖</button></div>`).join('')
     : '<p style="text-align:center;color:var(--muted);padding:46px 20px">還沒有收藏的句子。<br>複習時點句子右邊的 🔖 就能收藏，方便之後專門複習、連播練聽力。</p>';
@@ -821,7 +835,7 @@ function showSentences(){
 function playSentList(){
   if(!HAS_AUDIO||!curSent.length)return;
   if(!AUD)AUD=new Audio();let i=0;
-  const next=()=>{if(i>=curSent.length){AUD.onended=null;return;}AUD.src=`audio/${curSent[i].k}_${curSent[i].cid}.mp3`;AUD.playbackRate=0.92;i++;AUD.onended=next;AUD.play().catch(()=>{AUD.onended=null;});};
+  const next=()=>{if(i>=curSent.length){AUD.onended=null;return;}AUD.src=`audio/${curSent[i].k}_${curSent[i].cid}.mp3`;AUD.playbackRate=0.92*exSpeed();i++;AUD.onended=next;AUD.play().catch(()=>{AUD.onended=null;});};
   next();
 }
 
