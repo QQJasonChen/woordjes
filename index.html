@@ -542,6 +542,9 @@ function deckCards(){
 }
 function newCount(){return deckCards().filter(c=>!SRS[c.id]).length;}
 function dueNow(){const cards=deckCards();const due=cards.filter(c=>SRS[c.id]&&SRS[c.id].due<=now()).length;const fresh=Math.min(CFG.newPerDay,cards.filter(c=>!SRS[c.id]).length);return due+fresh;}
+/* 桌面 widget：把「待複習數 / 連續天數 / 一個要複習的字」推給原生 App（存進 App Group 供 widget 讀）。純網頁環境沒有 webkit 橋接時安靜略過。 */
+function widgetWord(){const cards=deckCards();const due=cards.filter(c=>SRS[c.id]&&SRS[c.id].due<=now());const fresh=cards.filter(c=>!SRS[c.id]);const pool=due.length?due:fresh;const c=pool[0];return c?{word:c.nl||'',zh:c.zh||''}:{word:'',zh:''};}
+function pushWidget(){try{if(!(window.webkit&&webkit.messageHandlers&&webkit.messageHandlers.wjdata))return;const w=widgetWord();webkit.messageHandlers.wjdata.postMessage({due:dueNow(),streak:(STAT.streak||0),word:w.word,zh:w.zh});}catch(e){}}
 
 /* ---------- queue & SM-2 ---------- */
 let QUEUE=[],qi=0,sessionTotal=0,lastSnap=null,exSeen=new Set();
@@ -776,6 +779,7 @@ function renderHome(){
   $('#sentences').classList.add('hidden');$('#browse').classList.add('hidden');
   const pro=isPro();
   $('#streakChip').textContent='🔥 '+(STAT.streak||0);
+  pushWidget();
   $('#streakChip').style.cursor='pointer'; $('#streakChip').onclick=openHeat;
   $('#proChip').textContent = pro?'⭐ Pro':'⭐ 升級 Pro';
   $('#proChip').style.cursor = pro?'default':'pointer';
@@ -926,7 +930,7 @@ function undo(){
   QUEUE.length=lastSnap.queueLen; qi=lastSnap.qi; lastSnap=null;
   showCard();
 }
-function finishStudy(){$('#study').classList.add('hidden');$('#done').classList.remove('hidden');$('#doneMsg').textContent=`複習了 ${STAT.today} 張 · 連續 ${STAT.streak} 天 🔥`;}
+function finishStudy(){$('#study').classList.add('hidden');$('#done').classList.remove('hidden');$('#doneMsg').textContent=`複習了 ${STAT.today} 張 · 連續 ${STAT.streak} 天 🔥`;pushWidget();}
 
 /* ---------- saved example sentences ---------- */
 let curSent=[];
