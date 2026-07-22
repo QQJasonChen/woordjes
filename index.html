@@ -164,6 +164,10 @@ body{font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif;background:v
 .bcefr{font-size:10px;font-weight:800;color:var(--blue);background:#e7f0fb;padding:2px 7px;border-radius:99px;margin-left:8px;vertical-align:2px}
 .bzh{font-size:14px;color:var(--text);font-weight:600;flex-shrink:0;text-align:right}
 body.hidezh .exzh,body.hidezh .bzh{display:none!important}
+.czsent{font-size:23px;line-height:1.55;color:var(--navy);font-weight:600;text-align:center;padding:22px 6px 6px}
+.czblank{display:inline-block;min-width:76px;border-bottom:3px solid var(--orange);vertical-align:-4px}
+.czhint{text-align:center;color:var(--muted);font-size:14px;margin-top:8px}
+.czans{text-align:center;color:var(--muted);font-size:16px;margin-top:8px}
 .baud{flex-shrink:0;width:36px;height:36px;border:none;background:#eef4fb;color:var(--blue);border-radius:50%;font-size:15px;cursor:pointer}
 .baud:active{transform:scale(.9)}
 .bextra{font-size:12px;color:var(--muted);margin-top:4px;letter-spacing:.2px}
@@ -237,7 +241,7 @@ body.hidezh .exzh,body.hidezh .bzh{display:none!important}
       <button class="bigbtn ghost" id="hideZhBtn" style="font-size:15px"></button>
 
       <button class="bigbtn ghost" id="myExBtn" style="font-size:15px">🔖 我的收藏句 <span id="myExN"></span></button>
-      <button class="bigbtn ghost" id="exportBtn" style="font-size:15px">📤 匯出收藏（Markdown / RemNote）</button>
+      <button class="bigbtn ghost" id="exportBtn" style="font-size:15px">📤 匯出收藏（Markdown / Notion / RemNote）</button>
 
       <div class="section-t">牌組</div>
       <div class="chips" id="levelChips"></div>
@@ -292,6 +296,7 @@ body.hidezh .exzh,body.hidezh .bzh{display:none!important}
       <button class="exmore" id="sentPlayAll" style="width:auto;margin:0;padding:8px 14px">🔊 連播全部</button>
     </div>
     <h2 style="color:var(--navy);font-size:20px;margin:4px 2px 12px">🔖 我的收藏句</h2>
+    <button class="bigbtn" id="sentClozeBtn" style="display:none;font-size:15px;margin:0 0 12px">🎯 填空複習（把單字挖空）</button>
     <div id="sentList"></div>
   </div>
 
@@ -309,6 +314,22 @@ body.hidezh .exzh,body.hidezh .bzh{display:none!important}
     </div>
     <div class="bcount" id="browseCount"></div>
     <div class="blist" id="browseList"></div>
+  </div>
+
+  <!-- 收藏句填空複習 -->
+  <div id="clozepop" class="pw hidden">
+    <div class="sheet">
+      <div class="grip"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+        <h2 style="margin:0">🎯 填空複習</h2>
+        <span class="chip" id="clozeProg">0 / 0</span>
+      </div>
+      <div id="clozeBody" style="min-height:150px"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="bigbtn ghost" id="clozeQuit" style="flex:1">結束</button>
+        <button class="bigbtn" id="clozeAct" style="flex:2">顯示答案</button>
+      </div>
+    </div>
   </div>
 
   <!-- STUDY HEATMAP (🔥 chip → 學習熱力圖) -->
@@ -358,6 +379,7 @@ body.hidezh .exzh,body.hidezh .bzh{display:none!important}
       <div class="psub">收藏單字 ⭐（含解析收藏的生字）＋ 收藏句 🔖，可複製或寄到 Email</div>
       <div class="seg" id="exFmtSeg" style="margin:10px 0">
         <button data-fmt="md" class="on">📝 Markdown</button>
+        <button data-fmt="notion">📋 Notion 表格</button>
         <button data-fmt="remnote">🧠 RemNote 填空</button>
       </div>
       <div class="psub" id="exHint" style="margin-bottom:6px"></div>
@@ -711,6 +733,15 @@ function buildExport(fmt){
     sents.forEach(s=>L.push('- '+s.nl+' :: '+(s.zh||'')));
     return L.join('\n');
   }
+  if(fmt==='notion'){
+    const pipe=s=>(s||'').replace(/\|/g,'／');
+    let n='';
+    if(words.length){ n+='## ⭐ 單字（'+words.length+'）\n\n| 荷蘭文 | 中文 | 詞性 | 例句 |\n| --- | --- | --- | --- |\n';
+      words.forEach(c=>{ n+='| '+pipe(c.nl)+' | '+pipe(c.zh)+' | '+pipe(c.pos||'')+' | '+pipe(c.ex||'')+' |\n'; }); }
+    if(sents.length){ if(n)n+='\n'; n+='## 🔖 收藏句（'+sents.length+'）\n\n| 荷蘭文 | 中文 |\n| --- | --- |\n';
+      sents.forEach(s=>{ n+='| '+pipe(s.nl)+' | '+pipe(s.zh)+' |\n'; }); }
+    return n;
+  }
   const today=new Date().toISOString().slice(0,10);
   let out='# Woordjes 收藏 · '+today+'\n';
   if(words.length){ out+='\n## ⭐ 單字 ('+words.length+')\n';
@@ -724,6 +755,8 @@ function refreshExport(){
   $('#exportText').value=buildExport(EXPORT_FMT);
   $('#exHint').textContent = EXPORT_FMT==='remnote'
     ? '貼進 RemNote：每行一張卡，{{ }} 為填空、{({ })} 為提示，:: 為正反卡。'
+    : EXPORT_FMT==='notion'
+    ? '貼進 Notion 會自動變成表格，可再點右上「⋯ → 轉換成資料庫」。'
     : '純 Markdown 清單，貼到筆記軟體 / 文件都可。';
 }
 function openExport(){ EXPORT_FMT='md'; document.querySelectorAll('#exFmtSeg button').forEach(b=>b.classList.toggle('on',b.dataset.fmt==='md')); refreshExport(); $('#exportSheet').classList.remove('hidden'); }
@@ -906,6 +939,7 @@ function showSentences(){
   $('#home').classList.add('hidden');$('#study').classList.add('hidden');$('#done').classList.add('hidden');
   $('#sentences').classList.remove('hidden');
   curSent=savedSentences();
+  $('#sentClozeBtn').style.display=curSent.length?'':'none';
   $('#sentPlayAll').style.display=(curSent.length&&HAS_AUDIO)?'':'none';
   $('#sentSpeed').style.display=(curSent.length&&HAS_AUDIO)?'':'none';
   $('#sentSpeed').textContent=exSpeedLabel();
@@ -919,6 +953,55 @@ function playSentList(){
   const next=()=>{if(i>=curSent.length){AUD.onended=null;return;}AUD.src=`${audioBase(curSent[i].cid)}audio/${curSent[i].k}_${curSent[i].cid}.mp3`;AUD.playbackRate=0.92*exSpeed();i++;AUD.onended=next;AUD.play().catch(()=>{AUD.onended=null;});};
   next();
 }
+
+/* ---------- 收藏句填空複習（把該句對應的單字挖空）---------- */
+let CLOZE=[], czi=0, czRevealed=false;
+function czStripArt(w){ return (w||'').replace(/^(de|het|een)\s+/i,'').trim(); }
+function czMake(it){
+  const c=VOCAB.find(x=>x.id==it.cid)||{};
+  const w=czStripArt(c.nl||'');
+  let q=null;
+  if(w){ const re=new RegExp('\\b('+_reEsc(w)+')\\b','i'); if(re.test(it.nl)) q=esc(it.nl).replace(re,'<span class="czblank">　　　</span>'); }
+  return { mode:q?'word':'sent', q, a:w, nl:it.nl, zh:it.zh||'', hint:c.zh||'', cid:it.cid, k:it.k };
+}
+function startCloze(){
+  CLOZE=savedSentences().map(czMake);
+  if(!CLOZE.length) return;
+  for(let i=CLOZE.length-1;i>0;i--){const j=Math.floor((Math.sin(i*12.9+CLOZE.length)*0.5+0.5)*(i+1));[CLOZE[i],CLOZE[j]]=[CLOZE[j],CLOZE[i]];}
+  czi=0; czRevealed=false; $('#clozepop').classList.remove('hidden'); czRender();
+}
+function czRender(){
+  if(czi>=CLOZE.length){ czDone(); return; }
+  const it=CLOZE[czi];
+  $('#clozeProg').textContent=(czi+1)+' / '+CLOZE.length;
+  const body=$('#clozeBody');
+  if(!czRevealed){
+    body.innerHTML = (it.mode==='word'
+        ? '<div class="czsent">'+it.q+'</div><div class="czhint">'+(it.hint?'提示：'+esc(it.hint):'填入正確的荷蘭文單字')+'</div>'
+        : '<div class="czsent">'+esc(it.zh)+'</div><div class="czhint">用荷蘭文把整句說出來</div>');
+    $('#clozeAct').textContent='顯示答案';
+  } else {
+    const sentHtml = it.mode==='word'
+      ? esc(it.nl).replace(new RegExp('('+_reEsc(it.a)+')','i'),'<b style="color:var(--orange)">$1</b>')
+      : '<b>'+esc(it.nl)+'</b>';
+    body.innerHTML = '<div class="czsent">'+sentHtml+'</div><div class="czans">'+esc(it.zh)+'</div>'
+      + (HAS_AUDIO?'<div style="text-align:center;margin-top:12px"><button class="exmore" style="width:auto;padding:8px 16px" onclick="play(\''+it.k+'\','+it.cid+')">🔊 聽發音</button></div>':'');
+    $('#clozeAct').textContent=(czi>=CLOZE.length-1)?'完成 ✓':'下一題 ›';
+  }
+}
+function czAct(){
+  if(czi>=CLOZE.length){ startCloze(); return; }
+  if(!czRevealed){ czRevealed=true; } else { czi++; czRevealed=false; }
+  czRender();
+}
+function czDone(){
+  $('#clozeBody').innerHTML='<div style="text-align:center;padding:34px 10px"><div style="font-size:46px">🎉</div><div style="font-size:17px;color:var(--navy);font-weight:700;margin-top:10px">收藏句複習完成！</div></div>';
+  $('#clozeProg').textContent=CLOZE.length+' / '+CLOZE.length;
+  $('#clozeAct').textContent='再一次';
+}
+$('#sentClozeBtn').onclick=startCloze;
+$('#clozeAct').onclick=czAct;
+$('#clozeQuit').onclick=()=>$('#clozepop').classList.add('hidden');
 
 /* ---------- browse / search (dictionary mode, no SRS gate) ---------- */
 let BROWSE_SCOPED=false;
